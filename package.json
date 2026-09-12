@@ -1,0 +1,1 @@
+{"name":"ava-turn-board","private":true,"type":"module","scripts":{"build":"node build.mjs"},"devDependencies":{"drizzle-kit":"0.31.4","drizzle-orm":"0.44.5","esbuild":"0.25.12"},"dependencies":{"@noble/hashes":"1.8.0"}}

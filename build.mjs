@@ -1,0 +1,10 @@
+import { build } from 'esbuild';
+import {readFile,mkdir,rm,writeFile,cp} from 'node:fs/promises';
+await rm('dist',{recursive:true,force:true});
+await mkdir('dist/server',{recursive:true});
+await mkdir('dist/.openai',{recursive:true});
+const assets={};
+for(const [file,type] of [['login.html','text/html; charset=utf-8'],['auth-ui.js','text/javascript; charset=utf-8'],['index.html','text/html; charset=utf-8'],['app.js','text/javascript; charset=utf-8'],['merge.js','text/javascript; charset=utf-8'],['styles.css','text/css; charset=utf-8']]) assets['/'+file]={body:await readFile('src/'+file,'utf8'),type};
+await build({entryPoints:['src/worker.js'],outfile:'dist/server/index.js',bundle:true,format:'esm',platform:'browser',target:'es2022',banner:{js:'const ASSETS='+JSON.stringify(assets)+';'}});
+await cp('.openai/hosting.json','dist/.openai/hosting.json');
+await cp('drizzle','dist/.openai/drizzle',{recursive:true});

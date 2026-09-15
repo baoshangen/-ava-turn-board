@@ -39,11 +39,9 @@ if [ -z "${DB_ID:-}" ]; then
 fi
 echo "    D1 database_id: $DB_ID"
 
-# Patch wrangler.toml with the real database_id (idempotent).
-if grep -q 'REPLACE_WITH_YOUR_D1_DATABASE_ID' wrangler.toml; then
-  sed -i.bak "s/REPLACE_WITH_YOUR_D1_DATABASE_ID/$DB_ID/" wrangler.toml && rm -f wrangler.toml.bak
-  echo "    Wrote database_id into wrangler.toml"
-fi
+# Write the real database_id into wrangler.toml (replaces empty or placeholder).
+sed -i.bak -E "s#^database_id = .*#database_id = \"$DB_ID\"#" wrangler.toml && rm -f wrangler.toml.bak
+echo "    Wrote database_id into wrangler.toml"
 
 echo "==> Applying database migrations (remote)"
 $WRANGLER d1 migrations apply "$DB_NAME" --remote

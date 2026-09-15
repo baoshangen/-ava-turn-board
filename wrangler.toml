@@ -12,12 +12,14 @@ workers_dev = true
 [build]
 command = "npm install && npm run build"
 
-# D1 database binding. `database_id` is filled in automatically by ./deploy.sh,
-# or paste the id printed by `wrangler d1 create ava-turn-board` here.
+# D1 database binding.
+# - Browser "Deploy to Cloudflare": leave database_id empty; Cloudflare
+#   provisions the database and fills the id automatically.
+# - CLI (./deploy.sh): the script creates the database and writes its id here.
 [[d1_databases]]
 binding = "DB"
 database_name = "ava-turn-board"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = ""
 migrations_dir = "migrations"
 
 # OWNER_SETUP_KEY is a *secret*, never put it here. Set it with:

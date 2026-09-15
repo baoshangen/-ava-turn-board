@@ -8,7 +8,14 @@ const hex = bytes => Array.from(bytes, n => n.toString(16).padStart(2, '0')).joi
 const unhex = value => Uint8Array.from(value.match(/../g), x => parseInt(x, 16));
 const random = size => hex(crypto.getRandomValues(new Uint8Array(size)));
 const digest = async value => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
-const owner = (request, env) => Boolean(request.headers.get('oai-authenticated-user-id')) && request.headers.get('oai-authenticated-user-email')?.toLowerCase() === env.OWNER_EMAIL?.toLowerCase();
+// Owner authorization on Cloudflare: the request must carry the secret setup key
+// (env.OWNER_SETUP_KEY). The previous OpenAI header check is unsafe on Workers —
+// any client can forge oai-authenticated-* headers, so it must not be trusted here.
+const validSetupKey = (provided, env) => {
+  const expected = env.OWNER_SETUP_KEY;
+  if (!expected || typeof provided !== 'string' || provided.length === 0) return false;
+  return constantEqual(encoder.encode(provided), encoder.encode(expected));
+};
 const jsonAuth = (data, status = 200, extra = {}) => Response.json(data, {status, headers: {'Cache-Control':'no-store', ...extra}});
 const cookie = (token, age = null) => `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax${age === null ? '' : '; Max-Age=' + age}`;
 const readToken = request => {
@@ -40,7 +47,7 @@ const parseInput = async request => {
   body += decoder.decode();
   const data = JSON.parse(body);
   if (!data || typeof data.username !== 'string' || typeof data.password !== 'string' || data.username.length > 40 || data.password.length > 128) throw new Error('input');
-  return {username:data.username.trim().toLowerCase(), password:data.password, remember:data.remember === true};
+  return {username:data.username.trim().toLowerCase(), password:data.password, remember:data.remember === true, setupKey:typeof data.setupKey === 'string' && data.setupKey.length <= 256 ? data.setupKey : ''};
 };
 async function throttle(request, env) {
   const now = Date.now(), windowEnd = (Math.floor(now / 900000) + 1) * 900000;
@@ -63,17 +70,14 @@ export async function authRoute(request, env, assets) {
     return new Response(asset.body, {headers:{'Content-Type':asset.type,'Cache-Control':'no-store'}});
   }
   if (path === '/setup') {
+    // The page itself carries no secret; the setup key is verified on the POST below.
     if (request.method !== 'GET') return jsonAuth({error:'Method not allowed'},405);
-    if (!owner(request, env)) {
-      if (!request.headers.get('oai-authenticated-user-id')) return Response.redirect(url.origin + '/signin-with-chatgpt?return_to=%2Fsetup',302);
-      return new Response('Chỉ chủ tiệm có quyền thiết lập tài khoản.',{status:403,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
-    }
     return new Response(assets['/login.html'].body,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
   }
   if (!path.startsWith('/api/auth/')) return null;
   if (path === '/api/auth/status' && request.method === 'GET') {
     const account = await env.DB.prepare('SELECT username FROM salon_account WHERE id = 1').first();
-    return jsonAuth({configured:!!account, canSetup:owner(request, env), username:owner(request, env) ? account?.username : undefined});
+    return jsonAuth({configured:!!account, canSetup:!!env.OWNER_SETUP_KEY});
   }
   if (request.method !== 'POST') return jsonAuth({error:'Method not allowed'},405);
   if (request.headers.get('Origin') !== url.origin || request.headers.get('Sec-Fetch-Site') === 'cross-site') return jsonAuth({error:'Yêu cầu không hợp lệ.'},403);
@@ -83,8 +87,9 @@ export async function authRoute(request, env, assets) {
     return jsonAuth({ok:true},200,{'Set-Cookie':cookie('',0)});
   }
   if (path === '/api/auth/setup') {
-    if (!owner(request, env)) return jsonAuth({error:'Chỉ chủ tiệm có quyền thiết lập tài khoản.'},403);
+    if (!env.OWNER_SETUP_KEY) return jsonAuth({error:'Chưa cấu hình mã thiết lập (OWNER_SETUP_KEY) trên máy chủ.'},503);
     let input; try { input = await parseInput(request); } catch { return jsonAuth({error:'Kiểm tra lại tên đăng nhập và mật khẩu.'},400); }
+    if (!validSetupKey(input.setupKey, env)) return jsonAuth({error:'Mã thiết lập không đúng. Chỉ chủ tiệm mới có mã này.'},403);
     const {username,password} = input;
     if (!/^[a-z0-9._-]{3,40}$/.test(username) || password.length < 15) return jsonAuth({error:'Tên đăng nhập: 3–40 ký tự (a–z, số, dấu . _ -). Mật khẩu: ít nhất 15 ký tự.'},400);
     const salt = random(32), epoch = random(16), passwordHash = hex(await hashPassword(password,salt));

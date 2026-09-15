@@ -1,0 +1,19 @@
+# Cloudflare Workers configuration for AVA Turn Board.
+# Deploy gives you a free https://<name>.<your-subdomain>.workers.dev link.
+name = "ava-turn-board"
+main = "dist/worker.js"
+compatibility_date = "2024-11-01"
+
+# Publish on the free *.workers.dev subdomain.
+workers_dev = true
+
+# D1 database binding. `database_id` is filled in automatically by ./deploy.sh,
+# or paste the id printed by `wrangler d1 create ava-turn-board` here.
+[[d1_databases]]
+binding = "DB"
+database_name = "ava-turn-board"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# OWNER_SETUP_KEY is a *secret*, never put it here. Set it with:
+#   wrangler secret put OWNER_SETUP_KEY

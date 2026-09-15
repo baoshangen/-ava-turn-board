@@ -16,9 +16,12 @@ sync live between devices. Free to host on a `*.workers.dev` link.
 
 ## How authentication works
 
-- **Owner setup key** (`OWNER_SETUP_KEY`): a server-side secret. Whoever holds it can
-  visit `/setup` once to create or change the shared salon account. Set it as a Worker
-  secret — never commit it.
+- **Owner setup** (`/setup`): create or change the shared salon account.
+  - By default (no `OWNER_SETUP_KEY` set) the **first** visit to `/setup` creates the
+    account with no key; afterwards only a signed-in device can change it. This is the
+    simplest path for a one-click browser deploy.
+  - For stricter control, set an `OWNER_SETUP_KEY` Worker secret — then `/setup` always
+    requires that key. Never commit it.
 - **Shared salon account**: a username + password (min 15 chars) that everyone in the
   salon uses to log in. Passwords are hashed with scrypt; sessions are random tokens
   stored hashed in D1. Changing the password logs out every device but keeps the board.
@@ -63,7 +66,8 @@ npm run deploy
 ### First run
 
 1. Open the printed `*.workers.dev` URL, then go to `<URL>/setup`.
-2. Enter a salon username, a password (≥ 15 characters), and the `OWNER_SETUP_KEY`.
+2. Enter a salon username and a password (≥ 15 characters). Enter the `OWNER_SETUP_KEY`
+   too if you configured one.
 3. Share the URL + username + password with the salon. Log in on phone and laptop —
    turns stay in sync automatically.
 

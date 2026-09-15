@@ -77,7 +77,8 @@ export async function authRoute(request, env, assets) {
   if (!path.startsWith('/api/auth/')) return null;
   if (path === '/api/auth/status' && request.method === 'GET') {
     const account = await env.DB.prepare('SELECT username FROM salon_account WHERE id = 1').first();
-    return jsonAuth({configured:!!account, canSetup:!!env.OWNER_SETUP_KEY});
+    const keyRequired = !!env.OWNER_SETUP_KEY;
+    return jsonAuth({configured:!!account, keyRequired, canSetup: keyRequired || !account});
   }
   if (request.method !== 'POST') return jsonAuth({error:'Method not allowed'},405);
   if (request.headers.get('Origin') !== url.origin || request.headers.get('Sec-Fetch-Site') === 'cross-site') return jsonAuth({error:'Yêu cầu không hợp lệ.'},403);
@@ -87,9 +88,18 @@ export async function authRoute(request, env, assets) {
     return jsonAuth({ok:true},200,{'Set-Cookie':cookie('',0)});
   }
   if (path === '/api/auth/setup') {
-    if (!env.OWNER_SETUP_KEY) return jsonAuth({error:'Chưa cấu hình mã thiết lập (OWNER_SETUP_KEY) trên máy chủ.'},503);
     let input; try { input = await parseInput(request); } catch { return jsonAuth({error:'Kiểm tra lại tên đăng nhập và mật khẩu.'},400); }
-    if (!validSetupKey(input.setupKey, env)) return jsonAuth({error:'Mã thiết lập không đúng. Chỉ chủ tiệm mới có mã này.'},403);
+    // Authorization for creating/changing the shared account:
+    //  - If OWNER_SETUP_KEY is set, the request must carry the correct key.
+    //  - Otherwise: first-run bootstrap (no account yet) is open, and once an
+    //    account exists, only a signed-in device can change it.
+    const existing = await env.DB.prepare('SELECT id FROM salon_account WHERE id = 1').first();
+    const authorized = env.OWNER_SETUP_KEY
+      ? validSetupKey(input.setupKey, env)
+      : (!existing || Boolean(await getSession(request, env)));
+    if (!authorized) return jsonAuth({error: env.OWNER_SETUP_KEY
+      ? 'Mã thiết lập không đúng. Chỉ chủ tiệm mới có mã này.'
+      : 'Tài khoản đã được thiết lập. Đăng nhập trước rồi mới đổi được (hoặc đặt OWNER_SETUP_KEY để mở lại).'},403);
     const {username,password} = input;
     if (!/^[a-z0-9._-]{3,40}$/.test(username) || password.length < 15) return jsonAuth({error:'Tên đăng nhập: 3–40 ký tự (a–z, số, dấu . _ -). Mật khẩu: ít nhất 15 ký tự.'},400);
     const salt = random(32), epoch = random(16), passwordHash = hex(await hashPassword(password,salt));

@@ -8,7 +8,6 @@
     $('auth-description').textContent = 'Tự đặt tên đăng nhập và mật khẩu (ít nhất 15 ký tự) rồi chia sẻ riêng cho người trong tiệm. Đổi mật khẩu sẽ đăng xuất tất cả thiết bị; bảng turn vẫn giữ nguyên.';
     $('password').autocomplete = 'new-password'; $('password').minLength = 15;
     $('confirm-field').hidden = false; $('confirm-password').required = true;
-    $('setup-key-field').hidden = false; $('setup-key').required = true;
     $('setup-link').hidden = true; $('back-login').hidden = false;
     $('auth-submit').textContent = 'Lưu tài khoản';
   }
@@ -17,9 +16,15 @@
       const response = await fetch('/api/auth/status',{cache:'no-store'});
       if (!response.ok) throw new Error('Chưa kết nối được. Tải lại trang để thử lại.');
       const data = await response.json(); configured = data.configured;
-      if (setup && !data.canSetup) throw new Error('Máy chủ chưa cấu hình mã thiết lập. Chủ tiệm cần đặt OWNER_SETUP_KEY khi deploy.');
-      $('auth-status').textContent = !setup && !configured ? 'Chủ tiệm cần thiết lập tài khoản trước khi đăng nhập.' : '';
-      $('auth-submit').disabled = !setup && !configured;
+      if (setup) {
+        $('setup-key-field').hidden = !data.keyRequired;
+        $('setup-key').required = !!data.keyRequired;
+        $('auth-status').textContent = configured ? 'Đã có tài khoản chung. Đổi tài khoản/mật khẩu sẽ đăng xuất mọi thiết bị.' : '';
+        $('auth-submit').disabled = false;
+      } else {
+        $('auth-status').textContent = !configured ? 'Chủ tiệm cần thiết lập tài khoản trước khi đăng nhập.' : '';
+        $('auth-submit').disabled = !configured;
+      }
     } catch(error) { $('auth-status').textContent = error.message; }
   }
   $('auth-form').addEventListener('submit', async event => {
